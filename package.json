@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "name": "issue-tracker-2024-go-backend",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "go build",
+    "go-tidy": "go mod tidy",
+    "go-functions": "go run main.go healthCheck.go database.go issueApi.go"
+  }
+}
