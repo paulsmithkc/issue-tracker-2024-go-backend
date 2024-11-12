@@ -2,7 +2,7 @@
 
 Issue tracker hobby project
 
-This simple REST API backend provides a CRUD interfaces to a table of issues stored in a postgresql database.
+This simple REST API backend provides a CRUD interface to a table of issues stored in a postgresql database.
 
 Inspiration: ["The 1 Coding Project Idea Guaranteed To Get You A Software Development Job" by Coder Foundry](https://youtu.be/oC483DTjRXU?si=_rf_gDkZ8Z2SlEva)
 
