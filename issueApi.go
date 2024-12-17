@@ -27,25 +27,26 @@ type ResData struct {
   Error any `json:"error"`
 }
 
-func ResSuccess(w http.ResponseWriter, data any) error {
+func ResSuccess(w http.ResponseWriter, data any) (int, error) {
+  var status int = http.StatusOK
   w.Header().Add("Content-Type", "application/json")
-  w.WriteHeader(http.StatusOK)
+  w.WriteHeader(status)
   json.NewEncoder(w).Encode(ResData { true, data, nil })
   log.Printf("%d\n", 200);
-  return nil
+  return status, nil
 }
 
-func ResError(w http.ResponseWriter, status int, err error, data any) error {
+func ResError(w http.ResponseWriter, status int, err error, data any) (int, error) {
   w.Header().Add("Content-Type", "application/json")
-  w.WriteHeader(http.StatusOK)
+  w.WriteHeader(status)
   json.NewEncoder(w).Encode(ResData { false, data, fmt.Sprintf("%v", err) })
   log.Printf("%d %v\n", status, err);
-  return nil
+  return status, nil
 }
 
 func routeIssueApi(w http.ResponseWriter, r *http.Request) {
   var err error
-  var status int
+  var status int = http.StatusInternalServerError
 
   method := r.Method
   slug := r.PathValue("slug")
@@ -54,20 +55,20 @@ func routeIssueApi(w http.ResponseWriter, r *http.Request) {
   switch slug {
   case "list":
     switch method {
-    case "GET": err, status = listIssues(w, r), 500
-    default: err, status = fmt.Errorf("unsupported method: %s", method), 405
+    case "GET": status, err = listIssues(w, r)
+    default: status, err = 405, fmt.Errorf("unsupported method: %s /issue/%s", method, slug)
     }
   case "new":
     switch method {
-      case "POST": err, status = insertIssue(w, r, slug), 500
-      default: err, status = fmt.Errorf("unsupported method: %s", method), 405
+      case "POST": status, err = insertIssue(w, r, slug)
+      default: status, err = 405, fmt.Errorf("unsupported method: %s /issue/%s", method, slug)
     }
   default:
     switch method {
-    case "GET": err, status = getIssue(w, r, slug), 500
-    case "POST": err, status = updateIssue(w, r, slug), 500
-    case "DELETE": err, status = deleteIssue(w, r, slug), 500
-    default: err, status = fmt.Errorf("unsupported method: %s", method), 405
+    case "GET": status, err = getIssue(w, r, slug)
+    case "POST": status, err = updateIssue(w, r, slug)
+    case "DELETE": status, err = deleteIssue(w, r, slug)
+    default: status, err = 405, fmt.Errorf("unsupported method: %s /issue/%s", method, slug)
     }
   }
 
@@ -76,16 +77,16 @@ func routeIssueApi(w http.ResponseWriter, r *http.Request) {
   }
 }
 
-func listIssues(w http.ResponseWriter, r *http.Request) error {
+func listIssues(w http.ResponseWriter, r *http.Request) (int, error) {
   db, err := OpenDB();
   if err != nil {
-    return err
+    return ResError(w, 500, fmt.Errorf("Database.Open: %w", err), nil)
   }
 
   query := "SELECT id, title, description, created_at FROM issues ORDER BY created_at desc LIMIT 100"
   rows, err := db.Query(query)
   if err != nil {
-    return fmt.Errorf("Database.Query: %w", err)
+    return ResError(w, 500, fmt.Errorf("Database.Query: %w", err), nil)
   }
 
   defer rows.Close()
@@ -99,7 +100,7 @@ func listIssues(w http.ResponseWriter, r *http.Request) error {
   for rows.Next() {
     err := rows.Scan(&id, &title, &description, &created_at);
     if err != nil {
-      return fmt.Errorf("Database.Scan: %w", err)
+      return ResError(w, 500, fmt.Errorf("Database.Scan: %w", err), nil)
     }
     items = append(items, Issue { id, title, description, created_at })
   }
@@ -107,10 +108,10 @@ func listIssues(w http.ResponseWriter, r *http.Request) error {
   return ResSuccess(w, items)
 }
 
-func getIssue(w http.ResponseWriter, r *http.Request, slug string) error {
+func getIssue(w http.ResponseWriter, r *http.Request, slug string) (int, error) {
   db, err := OpenDB();
   if err != nil {
-    return err
+    return ResError(w, 500, fmt.Errorf("Database.Open: %w", err), nil)
   }
 
   var id string
@@ -121,17 +122,17 @@ func getIssue(w http.ResponseWriter, r *http.Request, slug string) error {
   query := "SELECT id, title, description, created_at FROM issues WHERE id = $1 LIMIT 1"
   err = db.QueryRow(query, slug).Scan(&id, &title, &description, &created_at)
   if err != nil {
-    return fmt.Errorf("Database.Query: %w", err)
+    return ResError(w, 500, fmt.Errorf("Database.Query: %w", err), nil)
   }
 
   item := Issue { id, title, description, created_at }
   return ResSuccess(w, item)
 }
 
-func insertIssue(w http.ResponseWriter, r *http.Request, slug string) error {
+func insertIssue(w http.ResponseWriter, r *http.Request, slug string) (int, error) {
   db, err := OpenDB();
   if err != nil {
-    return err
+    return ResError(w, 500, fmt.Errorf("Database.Open: %w", err), nil)
   }
 
   contentType := r.Header.Get("Content-Type")
@@ -158,17 +159,17 @@ func insertIssue(w http.ResponseWriter, r *http.Request, slug string) error {
   query := "INSERT INTO issues (id, title, description) VALUES ($1, $2, $3)"
   _, err = db.Exec(query, d.Id, d.Title, d.Description)
   if err != nil {
-    return fmt.Errorf("Database.Exec: %w", err)
+    return ResError(w, 500, fmt.Errorf("Database.Exec: %w", err), nil)
   }
 
   item := Issue { d.Id, d.Title, d.Description, "" }
   return ResSuccess(w, item)
 }
 
-func updateIssue(w http.ResponseWriter, r *http.Request, slug string) error {
+func updateIssue(w http.ResponseWriter, r *http.Request, slug string) (int, error) {
   db, err := OpenDB();
   if err != nil {
-    return err
+    return ResError(w, 500, fmt.Errorf("Database.Open: %w", err), nil)
   }
 
   contentType := r.Header.Get("Content-Type")
@@ -194,23 +195,23 @@ func updateIssue(w http.ResponseWriter, r *http.Request, slug string) error {
   query := "UPDATE issues SET title = $2, description = $3 WHERE id = $1"
   _, err = db.Exec(query, slug, d.Title, d.Description)
   if err != nil {
-    return fmt.Errorf("Database.Exec: %w", err)
+    return ResError(w, 500, fmt.Errorf("Database.Exec: %w", err), nil)
   }
 
   item := Issue { slug, d.Title, d.Description, "" }
   return ResSuccess(w, item)
 }
 
-func deleteIssue(w http.ResponseWriter, r *http.Request, slug string) error {
+func deleteIssue(w http.ResponseWriter, r *http.Request, slug string) (int, error) {
   db, err := OpenDB();
   if err != nil {
-    return err
+    return ResError(w, 500, fmt.Errorf("Database.Open: %w", err), nil)
   }
 
   query := "DELETE FROM issues WHERE id = $1"
   _, err = db.Exec(query, slug)
   if err != nil {
-    return fmt.Errorf("Database.Exec: %w", err)
+    return ResError(w, 500, fmt.Errorf("Database.Exec: %w", err), nil)
   }
 
   item := Issue { slug, "", "", "" }
