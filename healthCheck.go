@@ -10,7 +10,7 @@ import (
 
 func init() {
   log.Println("Init healthCheck")
-   functions.HTTP("healthCheck", healthCheck)
+  functions.HTTP("healthCheck", healthCheck)
 }
 
 func healthCheck(w http.ResponseWriter, r *http.Request) {
